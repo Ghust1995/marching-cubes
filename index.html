@@ -14,6 +14,7 @@
 <script src="js/THREEx.KeyboardState.js"></script>
 <script src="js/THREEx.FullScreen.js"></script>
 <script src="js/THREEx.WindowResize.js"></script>
+<script src="js/lodash.min.js"></script>
 
 <!-- GUI for experimenting with values -->
 <script type='text/javascript' src='js/DAT.GUI.min.js'></script>
@@ -32,6 +33,7 @@ var keyboard = new THREEx.KeyboardState();
 var clock = new THREE.Clock();
 
 // custom global variables
+var Spheres;
 var points = [];
 var values = [];
 var axisMin, axisMax, axisRange;
@@ -44,15 +46,10 @@ animate();
 // FUNCTIONS
 function init()
 {
+	var SCREEN_WIDTH = window.innerWidth, SCREEN_HEIGHT = window.innerHeight;
+
 	// SCENE
 	scene = new THREE.Scene();
-	// CAMERA
-	var SCREEN_WIDTH = window.innerWidth, SCREEN_HEIGHT = window.innerHeight;
-	var VIEW_ANGLE = 45, ASPECT = SCREEN_WIDTH / SCREEN_HEIGHT, NEAR = 0.1, FAR = 20000;
-	camera = new THREE.PerspectiveCamera( VIEW_ANGLE, ASPECT, NEAR, FAR);
-	scene.add(camera);
-	camera.position.set(20,20,60);
-	camera.lookAt(scene.position);
 	// RENDERER
 	if ( Detector.webgl )
 		renderer = new THREE.WebGLRenderer( {antialias:true} );
@@ -62,6 +59,14 @@ function init()
 	renderer.setClearColor(0xffffff, 1);
 	container = document.getElementById( 'WebGLContainer' );
 	container.appendChild( renderer.domElement );
+	// CAMERA
+
+	var VIEW_ANGLE = 45, ASPECT = SCREEN_WIDTH / SCREEN_HEIGHT, NEAR = 0.1, FAR = 20000;
+	camera = new THREE.PerspectiveCamera( VIEW_ANGLE, ASPECT, NEAR, FAR);
+	scene.add(camera);
+	camera.position.set(20,20,60);
+	camera.lookAt(scene.position);
+
 	// EVENTS
 	THREEx.WindowResize(renderer, camera);
 	THREEx.FullScreen.bindKey({ charCode : 'm'.charCodeAt(0) });
@@ -99,34 +104,23 @@ function init()
 	// );
 
 	// number of cubes along a side
-	size = 20;
+	size = 30;
 
-	axisMin = -20;
-	axisMax =  20;
+	axisMin = -15;
+	axisMax =  15;
 	axisRange = axisMax - axisMin;
 
-	// Generate a list of 3D points and values at those points
-	for (var k = 0; k < size; k++)
-	for (var j = 0; j < size; j++)
-	for (var i = 0; i < size; i++)
-	{
-		// actual values
-		var x = axisMin + axisRange * i / (size - 1);
-		var y = axisMin + axisRange * j / (size - 1);
-		var z = axisMin + axisRange * k / (size - 1);
-		points.push( new THREE.Vector3(x,y,z) );
-		var off = 4
-		var v1 = Math.sin(0.2*x) + Math.sin(0.2*z) + y;
-		//var v2 = (y-off)*(y-off) + x*x + z*z - 25;
-		//var value =  y > 0 ? v2 : v1;
-		var value = v1;
-	  values.push( value );
-	}
 
-	var geometry = MarchingCubes(points, values, 0)
-	var colorMaterial =  new THREE.MeshStandardMaterial( {color: 0x0000ff, side: THREE.DoubleSide} );
-	mesh = new THREE.Mesh( geometry, colorMaterial );
-	scene.add(mesh);
+
+	Spheres = _.map(_.range(10), function(i) {
+		return {
+			center: new THREE.Vector3(0, 0, 0),
+			radius:  _.random(1, 3, true),
+			velocity: (new THREE.Vector3(_.random(0,10,true),
+				_.random(0,10,true),
+				_.random(0,10,true))).normalize().divideScalar(2),
+		}
+	});
 }
 
 function animate()
@@ -136,6 +130,12 @@ function animate()
 	update();
 }
 
+var colorMaterial =  new THREE.MeshStandardMaterial( {roughness: 0.25,
+	 metalness: 0,
+		color: 0x0000ff,
+		side: THREE.DoubleSide,
+	} );
+
 function update()
 {
 	controls.update();
@@ -143,6 +143,21 @@ function update()
 	var time = clock.getElapsedTime();
 	points = [];
 	values = [];
+
+	_.forEach(Spheres, function(s)
+	{
+		if (s.center.x + s.radius > axisMax && s.velocity.x > 0) s.velocity.setX(-s.velocity.x);
+		if (s.center.x - s.radius < axisMin && s.velocity.x < 0) s.velocity.setX(-s.velocity.x);
+		if (s.center.y + s.radius > axisMax && s.velocity.y > 0) s.velocity.setY(-s.velocity.y);
+		if (s.center.y - s.radius < axisMin && s.velocity.y < 0) s.velocity.setY(-s.velocity.y);
+		if (s.center.z + s.radius > axisMax && s.velocity.z > 0) s.velocity.setZ(-s.velocity.z);
+		if (s.center.z - s.radius < axisMin && s.velocity.z < 0) s.velocity.setZ(-s.velocity.z);
+
+		s.center.add(s.velocity);
+	});
+
+
+
 	// Generate a list of 3D points and values at those points
 	for (var k = 0; k < size; k++)
 	for (var j = 0; j < size; j++)
@@ -153,13 +168,18 @@ function update()
 		var y = axisMin + axisRange * j / (size - 1);
 		var z = axisMin + axisRange * k / (size - 1);
 		points.push( new THREE.Vector3(x,y,z) );
-		var off = 4;
-		var value = 0.5*Math.sin(0.5*x + time) + 0.5*Math.sin(0.5*z + time) + y;
+		value = 0;
+		_.forEach(Spheres, function(s)
+		{
+			value += (s.radius * s.radius) / (
+					(x - s.center.x) * (x - s.center.x) +
+					(y - s.center.y) * (y - s.center.y) +
+					(z - s.center.z) * (z - s.center.z)	);
+		});
 	  values.push( value );
 	}
 	scene.remove(mesh);
-	var geometry = MarchingCubes(points, values, 0.5)
-	var colorMaterial =  new THREE.MeshStandardMaterial( {roughness: 0.25, metalness: 0, color: 0x0000ff, side: THREE.DoubleSide, shading: THREE.FlatShading} );
+	var geometry = MarchingCubes(points, values, 1);
 	mesh = new THREE.Mesh( geometry, colorMaterial );
 	scene.add(mesh);
 }
