@@ -40,16 +40,32 @@ var axisMin, axisMax, axisRange;
 var mesh;
 var size;
 
+var colorMaterial;
+var refractionMaterial;
+
 init();
 animate();
 
 // FUNCTIONS
 function init()
 {
+	// LOAD STUFF
+	var r = "textures/Yokohama3/";
+	var urls = [
+		r + "posx.jpg", r + "negx.jpg",
+		r + "posy.jpg", r + "negy.jpg",
+		r + "posz.jpg", r + "negz.jpg"
+	];
+
+	var textureCube = new THREE.CubeTextureLoader().load( urls );
+	textureCube.mapping = THREE.CubeRefractionMapping;
+
 	var SCREEN_WIDTH = window.innerWidth, SCREEN_HEIGHT = window.innerHeight;
 
 	// SCENE
 	scene = new THREE.Scene();
+	scene.background = textureCube;
+
 	// RENDERER
 	if ( Detector.webgl )
 		renderer = new THREE.WebGLRenderer( {antialias:true} );
@@ -87,7 +103,7 @@ function init()
 	// CUSTOM //
 	////////////
 
-	scene.add( new THREE.AxisHelper(100) );
+	//scene.add( new THREE.AxisHelper(100) );
 
 	// GUI for experimenting with parameters
 	gui = new dat.GUI();
@@ -103,22 +119,30 @@ function init()
 	// 	}
 	// );
 
-	// number of cubes along a side
-	size = 30;
+	// Defining Materials
+	colorMaterial =  new THREE.MeshStandardMaterial( {roughness: 0.25,
+		 metalness: 0,
+			color: 0x0000ff,
+			side: THREE.DoubleSide,
+		} );
 
-	axisMin = -15;
-	axisMax =  15;
+	refractionMaterial = new THREE.MeshPhongMaterial( { color: 0xccfffd, emissive: 0xffffff, specular: 0xccfffd , envMap: textureCube, refractionRatio: 0.8, transparent: true, opacity: 0.7, shininess: 8  } );
+
+
+	// number of cubes along a side
+	size = 35;
+
+	axisMin = -22;
+	axisMax =  22;
 	axisRange = axisMax - axisMin;
 
-
-
-	Spheres = _.map(_.range(10), function(i) {
+	Spheres = _.map(_.range(4), function(i) {
 		return {
 			center: new THREE.Vector3(0, 0, 0),
-			radius:  _.random(1, 3, true),
+			radius:  _.random(3, 5, true),
 			velocity: (new THREE.Vector3(_.random(0,10,true),
 				_.random(0,10,true),
-				_.random(0,10,true))).normalize().divideScalar(2),
+				_.random(0,10,true))).normalize().divideScalar(4),
 		}
 	});
 }
@@ -130,12 +154,6 @@ function animate()
 	update();
 }
 
-var colorMaterial =  new THREE.MeshStandardMaterial( {roughness: 0.25,
-	 metalness: 0,
-		color: 0x0000ff,
-		side: THREE.DoubleSide,
-	} );
-
 function update()
 {
 	controls.update();
@@ -146,12 +164,12 @@ function update()
 
 	_.forEach(Spheres, function(s)
 	{
-		if (s.center.x + s.radius > axisMax && s.velocity.x > 0) s.velocity.setX(-s.velocity.x);
-		if (s.center.x - s.radius < axisMin && s.velocity.x < 0) s.velocity.setX(-s.velocity.x);
-		if (s.center.y + s.radius > axisMax && s.velocity.y > 0) s.velocity.setY(-s.velocity.y);
-		if (s.center.y - s.radius < axisMin && s.velocity.y < 0) s.velocity.setY(-s.velocity.y);
-		if (s.center.z + s.radius > axisMax && s.velocity.z > 0) s.velocity.setZ(-s.velocity.z);
-		if (s.center.z - s.radius < axisMin && s.velocity.z < 0) s.velocity.setZ(-s.velocity.z);
+		if (s.center.x + s.radius > axisMax - 2 && s.velocity.x > 0) s.velocity.setX(-s.velocity.x);
+		if (s.center.x - s.radius < axisMin + 2 && s.velocity.x < 0) s.velocity.setX(-s.velocity.x);
+		if (s.center.y + s.radius > axisMax - 2 && s.velocity.y > 0) s.velocity.setY(-s.velocity.y);
+		if (s.center.y - s.radius < axisMin + 2 && s.velocity.y < 0) s.velocity.setY(-s.velocity.y);
+		if (s.center.z + s.radius > axisMax - 2 && s.velocity.z > 0) s.velocity.setZ(-s.velocity.z);
+		if (s.center.z - s.radius < axisMin + 2 && s.velocity.z < 0) s.velocity.setZ(-s.velocity.z);
 
 		s.center.add(s.velocity);
 	});
@@ -180,7 +198,7 @@ function update()
 	}
 	scene.remove(mesh);
 	var geometry = MarchingCubes(points, values, 1);
-	mesh = new THREE.Mesh( geometry, colorMaterial );
+	mesh = new THREE.Mesh( geometry, refractionMaterial );
 	scene.add(mesh);
 }
 
@@ -322,11 +340,19 @@ function MarchingCubes(points, values, isolevel) {
 
 		// the while loop should run at most 5 times,
 		//   since the 16th entry in each row is a -1.
+
+		geometry.uvsNeedUpdate = true;
+		geometry.verticesNeedUpdate = true;
+		geometry.elementsNeedUpdate = true;
+		geometry.normalsNeedUpdate = true;
+		geometry.groupsNeedUpdate = true;
+		geometry.lineDistancesNeedUpdate = true;
+
 		while ( THREE.triTable[ cubeindex + i ] != -1 )
 		{
-			var index1 = THREE.triTable[cubeindex + i];
+			var index3 = THREE.triTable[cubeindex + i];
 			var index2 = THREE.triTable[cubeindex + i + 1];
-			var index3 = THREE.triTable[cubeindex + i + 2];
+			var index1 = THREE.triTable[cubeindex + i + 2];
 
 			geometry.vertices.push( vlist[index1].clone() );
 			geometry.vertices.push( vlist[index2].clone() );
@@ -341,6 +367,7 @@ function MarchingCubes(points, values, isolevel) {
 		}
 	}
 
+	geometry.mergeVertices();
 	geometry.computeFaceNormals();
 	geometry.computeVertexNormals();
 
